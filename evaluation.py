@@ -91,8 +91,8 @@ def load_datasets():
     df_jobs = pd.read_csv(jobs_csv)
     df_skills = pd.read_csv(skills_csv)
 
-    print(f"[INFO] Loaded {len(df_jobs)} job descriptions from {jobs_csv}")
-    print(f"[INFO] Loaded {len(df_skills)} canonical skills from {skills_csv}")
+    print(f"[INFO] Loaded {len(df_jobs)} job descriptions from data/job-descriptions-tagged.csv")
+    print(f"[INFO] Loaded {len(df_skills)} canonical skills from data/skill-list.csv")
 
     return df_jobs, set(df_skills['skill'].dropna().str.strip())
 
@@ -584,7 +584,7 @@ def write_excel_spreadsheet(df_eval, metrics, patterns, filepath):
         z.writestr('xl/worksheets/sheet3.xml', sheet3_xml)
         z.writestr('xl/worksheets/sheet4.xml', sheet4_xml)
 
-    print(f"[SUCCESS] Exported 4-sheet evaluation spreadsheet to {filepath}")
+    print(f"[SUCCESS] Exported 4-sheet evaluation spreadsheet to {os.path.basename(filepath)}")
 
 
 # --------------------------------------------------------------------------------------
@@ -756,7 +756,7 @@ def generate_charts(metrics, patterns):
 
     p3.get_pixmap(dpi=150).save(os.path.join(CHARTS_DIR, 'chart3_error_distribution.png'))
 
-    print(f"[SUCCESS] Generated 3 professional charts in {CHARTS_DIR}")
+    print(f"[SUCCESS] Generated 3 professional charts in {os.path.basename(CHARTS_DIR)}/")
 
 
 # --------------------------------------------------------------------------------------
@@ -937,7 +937,7 @@ def generate_pdf_report(metrics, patterns, filepath):
     page.insert_text(fitz.Point(480, 825), "Page 1 of 1", fontsize=7, color=(0.55, 0.60, 0.65))
 
     doc.save(filepath)
-    print(f"[SUCCESS] Compiled strictly one-page PDF report to {filepath}")
+    print(f"[SUCCESS] Compiled strictly one-page PDF report to {os.path.basename(filepath)}")
 
 
 # --------------------------------------------------------------------------------------
@@ -1060,10 +1060,10 @@ def main():
     # 8. Run validation suite
     run_validation_suite(df_eval, metrics, taxonomy_skills)
 
-    print(f"[COMPLETED] All deliverables successfully created in:")
-    print(f"            - Excel:  {EXCEL_PATH}")
-    print(f"            - PDF:    {PDF_PATH}")
-    print(f"            - Charts: {CHARTS_DIR}")
+    print("[COMPLETED] All deliverables successfully created in repository:")
+    print("            - Excel:  skill_evaluation.xlsx")
+    print("            - PDF:    evaluation_report.pdf")
+    print("            - Charts: charts/")
 
 
 if __name__ == '__main__':

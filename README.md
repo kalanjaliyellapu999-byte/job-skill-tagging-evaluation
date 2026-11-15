@@ -234,7 +234,7 @@ The evaluation pipeline is fully self-contained in `evaluation.py`.
 Open PowerShell or Command Prompt, navigate to the project directory, and run:
 
 ```powershell
-cd C:\Users\bavii\.gemini\antigravity\scratch\job_skill_tagging_evaluation
+cd job_skill_tagging_evaluation
 
 # Run the complete automated evaluation pipeline
 python evaluation.py
@@ -291,6 +291,6 @@ job_skill_tagging_evaluation/
 
 ### AI Tool Usage Disclosure:
 In accordance with internship assessment guidelines:
-- **Assisted Scaffolding:** Antigravity AI was utilized as a productivity assistant to draft boilerplate Python code, OpenXML formatting, PyMuPDF vector drawing routines, and Markdown documentation layout.
-- **Methodology & Correctness Audit:** All evaluation formulas, classification boundaries, empirical failure patterns, synonym constraints, and data-driven assertions were reviewed, tested, and validated by the author.
+- **Assisted Scaffolding:** Antigravity AI was utilized as a productivity assistant to draft boilerplate Python evaluation routines, OpenXML generation, PyMuPDF vector drawing routines, and Markdown documentation layout.
+- **Verification Disclosure:** Ground-truth reference annotations were extracted via automated rule-based regex parsing and have NOT been verified by an independent human annotator panel. All 50 job descriptions remain pending human review.
 - **Zero Data Fabrication:** No dataset records, evaluation counts, empirical examples, or performance metrics were fabricated. All figures reflect verified calculations from the input datasets.
