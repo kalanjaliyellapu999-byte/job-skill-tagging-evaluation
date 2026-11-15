@@ -2,7 +2,7 @@
 ========================================================================================
 AI-BASED JOB DESCRIPTION SKILL TAGGING EVALUATION
 Module: evaluation.py
-Author: Kalanjali (kalanjaliyellapu999-byte)
+Author: AI/ML Internship Candidate (ID Anonymized for Submission)
 Description: Reproducible evaluation pipeline assessing AI skill-tagging model reliability
              across 50 job descriptions against an official skill taxonomy.
              Generates skill_evaluation.xlsx, charts, and evaluation_report.pdf.
@@ -46,6 +46,9 @@ os.makedirs(CHARTS_DIR, exist_ok=True)
 # --------------------------------------------------------------------------------------
 # 1. TAXONOMY & SYNONYM MAPPING DEFINITIONS
 # --------------------------------------------------------------------------------------
+# Strictly canonical abbreviations and direct regional spelling variants.
+# Broad ambiguous terms ('API', 'Social Media') are deliberately excluded to avoid
+# ungrounded assumptions without contextual evidence.
 
 SYNONYM_MAPPING = {
     'Excel': {
@@ -71,14 +74,6 @@ SYNONYM_MAPPING = {
     'Postgres': {
         'canonical': 'PostgreSQL',
         'reason': 'Official and widely used shortened name for PostgreSQL database.'
-    },
-    'Social Media': {
-        'canonical': 'Social Media Marketing',
-        'reason': 'Truncated phrasing referring to the canonical Social Media Marketing skill in marketing context.'
-    },
-    'API': {
-        'canonical': 'REST APIs',
-        'reason': 'General interface acronym referring specifically to the required REST APIs in backend roles.'
     }
 }
 
@@ -104,8 +99,9 @@ def load_datasets():
 
 def parse_job_description(desc, taxonomy_skills):
     """
-    Parses a single job description text into required skills, optional skills,
+    Parses a single job description text into draft required skills, optional skills,
     and supporting verbatim evidence using deterministic linguistic pattern matching.
+    NOTE: These are automated draft labels awaiting independent human review.
     """
     # 1. Extract requirement clause
     req_match = re.search(
@@ -156,7 +152,7 @@ def evaluate_job_descriptions(df_jobs, taxonomy_skills):
         raw_tags_str = str(row['model_tags']) if pd.notna(row['model_tags']) else ''
         raw_tags = [t.strip() for t in raw_tags_str.split(';') if t.strip()]
 
-        # Parse ground-truth reference skills
+        # Parse ground-truth reference skills (rule-based draft)
         req_skills, opt_skills, evidence = parse_job_description(desc, taxonomy_skills)
 
         # Normalize predicted tags using synonym mapping
@@ -190,7 +186,7 @@ def evaluate_job_descriptions(df_jobs, taxonomy_skills):
             if fp in opt_skills:
                 notes.append(f"Predicted optional skill as required: '{fp}'")
             elif fp not in taxonomy_skills:
-                notes.append(f"Predicted non-taxonomy/soft skill: '{fp}'")
+                notes.append(f"Predicted non-taxonomy/unmapped skill: '{fp}'")
             else:
                 notes.append(f"Hallucinated unrelated skill: '{fp}'")
 
@@ -215,7 +211,7 @@ def evaluate_job_descriptions(df_jobs, taxonomy_skills):
             'tp_count': len(tp_skills),
             'fp_count': len(fp_skills),
             'fn_count': len(fn_skills),
-            'review_status': 'Audited Draft / Systematic Rule-Verified',
+            'review_status': 'PENDING_HUMAN_REVIEW (Rule-generated draft; awaiting independent human audit)',
             'tp_list': tp_skills,
             'fp_list': fp_skills,
             'fn_list': fn_skills,
@@ -291,8 +287,8 @@ def extract_error_patterns(df_eval, taxonomy_skills):
                     'jd_id': jid,
                     'title': title,
                     'predicted': fp,
-                    'expected': f"Invalid Taxonomy Term. Required: {row['required_skills']}",
-                    'sub_type': 'Non-Taxonomy Soft Skill'
+                    'expected': f"Invalid / Non-Taxonomy Term. Required: {row['required_skills']}",
+                    'sub_type': 'Non-Taxonomy / Unmapped Skill'
                 })
             else:
                 hallucination_errors.append({
@@ -313,15 +309,17 @@ def extract_error_patterns(df_eval, taxonomy_skills):
                 'sub_type': 'Core Required Skill Omission'
             })
 
+    total_errors = len(modality_errors) + len(hallucination_errors) + len(omission_errors)
+
     patterns = [
         {
             'pattern': 'Pattern 1: Modality Insensitivity (Over-tagging Optional / Nice-to-Have Skills as Required)',
             'count': len(modality_errors),
-            'percentage': (len(modality_errors) / (len(modality_errors) + len(hallucination_errors) + len(omission_errors))) * 100,
+            'percentage': (len(modality_errors) / total_errors) * 100 if total_errors > 0 else 0.0,
             'explanation': (
                 "The model fails to interpret linguistic modality cues such as 'Bonus if you have used...', "
                 "'Nice to have:', and 'is a plus, not a must'. Whenever a recognized skill entity is mentioned in "
-                "an optional clause, the model blindly promotes it to a mandatory skill tag. This inflates role "
+                "an optional clause, the model promotes it to a mandatory skill tag. This inflates role "
                 "prerequisites and artificially restricts the candidate pool."
             ),
             'examples': [
@@ -339,12 +337,12 @@ def extract_error_patterns(df_eval, taxonomy_skills):
         {
             'pattern': 'Pattern 2: Domain-Incongruent Hallucinations & Non-Taxonomy Skill Invasions',
             'count': len(hallucination_errors),
-            'percentage': (len(hallucination_errors) / (len(modality_errors) + len(hallucination_errors) + len(omission_errors))) * 100,
+            'percentage': (len(hallucination_errors) / total_errors) * 100 if total_errors > 0 else 0.0,
             'explanation': (
-                "The model produces tags with zero textual support in the job description. This bifurcates into: "
-                "(a) injecting heavy enterprise software (SAP, Kubernetes, Blockchain) into non-technical roles "
-                "(Finance, HR, Content Writing), and (b) predicting colloquial soft skills (Leadership, Problem Solving, "
-                "Teamwork, Communication, Time Management) that are absent from the official permitted taxonomy."
+                "The model produces tags unsupported by the job description or permitted taxonomy. This includes: "
+                "(a) injecting enterprise technologies (SAP, Kubernetes, Blockchain) into non-technical roles "
+                "(Finance, HR, Content Writing), and (b) predicting soft skills or broad unmapped terms (Leadership, "
+                "Problem Solving, Teamwork, Communication, API, Social Media) that violate strict taxonomy boundaries."
             ),
             'examples': [
                 {'jd_id': 'JD004', 'predicted': 'SAP', 'expected': 'Zero Text Support (Content Writer Intern)'},
@@ -361,7 +359,7 @@ def extract_error_patterns(df_eval, taxonomy_skills):
         {
             'pattern': 'Pattern 3: Omission of Core Required Technical Skills (False Negatives)',
             'count': len(omission_errors),
-            'percentage': (len(omission_errors) / (len(modality_errors) + len(hallucination_errors) + len(omission_errors))) * 100,
+            'percentage': (len(omission_errors) / total_errors) * 100 if total_errors > 0 else 0.0,
             'explanation': (
                 "The model fails to extract essential, explicitly mandated technical skills described in core duty "
                 "clauses ('You will use X, Y, Z every day', 'Required: X, Y, Z'). This occurs frequently in compound "
@@ -405,7 +403,7 @@ def write_excel_spreadsheet(df_eval, metrics, patterns, filepath):
 
     # Prepare sheet 1 data
     s1_cols = [
-        "jd_id", "Job description", "Original predicted tags", "Independently identified required skills",
+        "jd_id", "Job description", "Original predicted tags", "Reference required skills (Rule-based draft)",
         "Optional skills", "Correct predicted tags (TP)", "Incorrect predicted tags (FP)",
         "Missing required skills (FN)", "Supporting evidence", "Evaluation notes",
         "TP count", "FP count", "FN count", "Review status"
@@ -425,22 +423,27 @@ def write_excel_spreadsheet(df_eval, metrics, patterns, filepath):
     for orig, details in sorted(SYNONYM_MAPPING.items()):
         s2_data.append([orig, details['canonical'], details['reason']])
 
+    # Compute error subtype counts dynamically
+    opt_count = patterns[0]['count']
+    non_tax_count = len([e for e in patterns[1]['raw_errors'] if e['sub_type'] == 'Non-Taxonomy / Unmapped Skill'])
+    ent_count = len([e for e in patterns[1]['raw_errors'] if e['sub_type'] == 'Unrelated Enterprise Hallucination'])
+
     # Prepare sheet 3 data
     s3_cols = ["Evaluation Metric", "Raw Value / Denominator Formula", "Calculated Metric", "Percentage (%)", "Operational Interpretation"]
     s3_data = [
-        ["Total Job Descriptions Evaluated", "50 Unique JDs", 50, "100.00%", "Complete benchmark evaluation set"],
+        ["Total Job Descriptions Evaluated", "50 Unique JDs", metrics['total_jds'], "100.00%", "Complete benchmark evaluation set"],
         ["Total Reference Required Skills", "Aggregated Ground Truth", metrics['total_required_skills'], "-", "Sum of all required skills in corpus"],
         ["Total Model-Predicted Tags", "Aggregated Model Outputs", metrics['total_predicted_tags'], "-", "Sum of unique predicted tags per JD"],
         ["True Positives (TP)", "Model-predicted supported required skills", metrics['total_tp'], "-", "Correctly identified required skill tags"],
-        ["False Positives (FP)", "Model-predicted unsupported tags", metrics['total_fp'], "-", "Incorrect tags (20 optional + 16 non-tax + 12 hallucinated)"],
+        ["False Positives (FP)", "Model-predicted unsupported tags", metrics['total_fp'], "-", f"Incorrect tags ({opt_count} optional + {non_tax_count} non-tax/unmapped + {ent_count} hallucinated)"],
         ["False Negatives (FN)", "Missing required skills", metrics['total_fn'], "-", "Required skills present in JD but omitted by model"],
-        ["Micro Precision", "TP / (TP + FP) = 152 / 200", f"{metrics['precision']:.4f}", f"{metrics['precision']*100:.2f}%", "76.00% of predicted tags represent genuine required skills"],
-        ["Micro Recall", "TP / (TP + FN) = 152 / 177", f"{metrics['recall']:.4f}", f"{metrics['recall']*100:.2f}%", "85.88% of genuine required skills were successfully captured"],
+        ["Micro Precision", f"TP / (TP + FP) = {metrics['total_tp']} / {metrics['total_tp'] + metrics['total_fp']}", f"{metrics['precision']:.4f}", f"{metrics['precision']*100:.2f}%", f"{metrics['precision']*100:.2f}% of predicted tags represent genuine required skills"],
+        ["Micro Recall", f"TP / (TP + FN) = {metrics['total_tp']} / {metrics['total_tp'] + metrics['total_fn']}", f"{metrics['recall']:.4f}", f"{metrics['recall']*100:.2f}%", f"{metrics['recall']*100:.2f}% of genuine required skills were successfully captured"],
         ["Micro F1-Score", "2 * Precision * Recall / (Precision + Recall)", f"{metrics['f1_score']:.4f}", f"{metrics['f1_score']*100:.2f}%", "Harmonic balance between precision and recall"],
-        ["Required-Skill Miss Rate", "FN / (TP + FN) = 25 / 177", f"{metrics['miss_rate']:.4f}", f"{metrics['miss_rate']*100:.2f}%", "14.12% of required skills are missing from model tags"],
-        ["Optional Skills Intrusion Count", "Optional skills predicted as required", 20, "40.00%", "20 out of 50 optional skills incorrectly tagged as required"],
-        ["Non-Taxonomy Invalid Predictions", "Tags outside official skill list", 16, "33.33%", "16 soft skill tags outside official permitted taxonomy"],
-        ["Unrelated Enterprise Hallucinations", "Zero textual support in JD", 12, "25.00%", "12 enterprise tags (SAP, K8s, Blockchain) hallucinated"]
+        ["Required-Skill Miss Rate", f"FN / (TP + FN) = {metrics['total_fn']} / {metrics['total_tp'] + metrics['total_fn']}", f"{metrics['miss_rate']:.4f}", f"{metrics['miss_rate']*100:.2f}%", f"{metrics['miss_rate']*100:.2f}% of required skills are missing from model tags"],
+        ["Optional Skills Intrusion Count", "Optional skills predicted as required", opt_count, f"{(opt_count/metrics['total_jds'])*100:.2f}%", f"{opt_count} optional skills incorrectly tagged as required"],
+        ["Non-Taxonomy / Unmapped Predictions", "Tags outside official skill list", non_tax_count, f"{(non_tax_count/metrics['total_fp'])*100:.2f}%", f"{non_tax_count} tags outside official permitted taxonomy"],
+        ["Unrelated Enterprise Hallucinations", "Zero textual support in JD", ent_count, f"{(ent_count/metrics['total_fp'])*100:.2f}%", f"{ent_count} enterprise tags (SAP, K8s, Blockchain) hallucinated"]
     ]
 
     # Prepare sheet 4 data
@@ -608,7 +611,7 @@ def generate_charts(metrics, patterns):
     sh1.commit()
 
     p1.insert_text(fitz.Point(40, 42), "Model Classification Outcomes: TP, FP, and FN", fontsize=16, color=(0.08, 0.15, 0.30))
-    p1.insert_text(fitz.Point(40, 64), "Aggregated count distribution across 50 fictional job descriptions (200 total model tags)", fontsize=10, color=(0.35, 0.40, 0.48))
+    p1.insert_text(fitz.Point(40, 64), f"Aggregated count distribution across 50 fictional job descriptions ({metrics['total_predicted_tags']} total model tags)", fontsize=10, color=(0.35, 0.40, 0.48))
 
     # Grid & Bars
     categories = [
@@ -662,13 +665,13 @@ def generate_charts(metrics, patterns):
     sh2.commit()
 
     p2.insert_text(fitz.Point(40, 42), "Model Evaluation Metrics: Precision, Recall, F1, and Miss Rate", fontsize=16, color=(0.08, 0.15, 0.30))
-    p2.insert_text(fitz.Point(40, 64), "Micro-averaged performance rates across 50 job descriptions and 177 reference skills", fontsize=10, color=(0.35, 0.40, 0.48))
+    p2.insert_text(fitz.Point(40, 64), f"Micro-averaged performance rates across 50 job descriptions and {metrics['total_required_skills']} reference skills", fontsize=10, color=(0.35, 0.40, 0.48))
 
     metric_items = [
-        ("Micro Precision", metrics['precision'] * 100, (0.15, 0.45, 0.75), "TP / (TP + FP) = 152 / 200"),
-        ("Micro Recall", metrics['recall'] * 100, (0.13, 0.65, 0.40), "TP / (TP + FN) = 152 / 177"),
+        ("Micro Precision", metrics['precision'] * 100, (0.15, 0.45, 0.75), f"TP / (TP + FP) = {metrics['total_tp']} / {metrics['total_tp'] + metrics['total_fp']}"),
+        ("Micro Recall", metrics['recall'] * 100, (0.13, 0.65, 0.40), f"TP / (TP + FN) = {metrics['total_tp']} / {metrics['total_tp'] + metrics['total_fn']}"),
         ("Micro F1-Score", metrics['f1_score'] * 100, (0.45, 0.30, 0.70), "2*P*R / (P + R)"),
-        ("Miss Rate", metrics['miss_rate'] * 100, (0.85, 0.28, 0.22), "FN / (TP + FN) = 25 / 177")
+        ("Miss Rate", metrics['miss_rate'] * 100, (0.85, 0.28, 0.22), f"FN / (TP + FN) = {metrics['total_fn']} / {metrics['total_tp'] + metrics['total_fn']}")
     ]
 
     m_cx0, m_cy0, m_cx1, m_cy1 = 70, 95, 680, 360
@@ -714,8 +717,9 @@ def generate_charts(metrics, patterns):
     sh3.finish(fill=(0.98, 0.99, 1.0), color=(0.90, 0.92, 0.95))
     sh3.commit()
 
-    p3.insert_text(fitz.Point(40, 42), "Empirical Error Pattern Distribution (73 Total Errors)", fontsize=16, color=(0.08, 0.15, 0.30))
-    p3.insert_text(fitz.Point(40, 64), "Decomposition of False Positives (48) and False Negatives (25) across 3 failure modes", fontsize=10, color=(0.35, 0.40, 0.48))
+    total_err_count = metrics['total_fp'] + metrics['total_fn']
+    p3.insert_text(fitz.Point(40, 42), f"Empirical Error Pattern Distribution ({total_err_count} Total Errors)", fontsize=16, color=(0.08, 0.15, 0.30))
+    p3.insert_text(fitz.Point(40, 64), f"Decomposition of False Positives ({metrics['total_fp']}) and False Negatives ({metrics['total_fn']}) across 3 failure modes", fontsize=10, color=(0.35, 0.40, 0.48))
 
     error_items = [
         ("Modality Insensitivity (Optional as Required)", patterns[0]['count'], patterns[0]['percentage'], (0.92, 0.58, 0.15)),
@@ -781,7 +785,7 @@ def generate_pdf_report(metrics, patterns, filepath):
 
     page.insert_text(fitz.Point(32, 26), "EVALUATION REPORT: AI JOB DESCRIPTION SKILL TAGGING", fontsize=13, color=(1, 1, 1))
     page.insert_text(fitz.Point(32, 42), "Model Reliability Assessment across 50 Job Descriptions & Official Taxonomy", fontsize=8.5, color=(0.80, 0.85, 0.95))
-    page.insert_text(fitz.Point(430, 42), "Status: Audited Draft / Rule-Verified", fontsize=7.5, color=(0.75, 0.85, 1.0))
+    page.insert_text(fitz.Point(400, 42), "Status: Draft / Pending Human Review", fontsize=7.5, color=(0.75, 0.85, 1.0))
 
     cur_y = 78
 
@@ -793,8 +797,8 @@ def generate_pdf_report(metrics, patterns, filepath):
 
     page.insert_text(fitz.Point(40, cur_y + 14), "1. OBJECTIVE & MULTI-LABEL METHODOLOGY", fontsize=9, color=(0.08, 0.16, 0.32))
     obj_p1 = "Objective: Evaluate the reliability of an existing skill-tagging model matching students with jobs across 50 fictional JDs."
-    obj_p2 = "Methodology: Multi-label classification. Reference required skills were independently established from JD text. Predicted tags"
-    obj_p3 = "were mapped via canonical synonym mapping. Skills in optional clauses ('Bonus', 'Nice to have') were excluded from required recall."
+    obj_p2 = "Methodology: Multi-label classification. Draft reference required skills were extracted via regex pattern matching from JD text."
+    obj_p3 = "Tags normalized via 6 canonical synonym rules. Optional skills ('Bonus', 'Nice to have') strictly excluded from required recall."
     page.insert_text(fitz.Point(40, cur_y + 28), obj_p1, fontsize=7.5, color=(0.25, 0.30, 0.38))
     page.insert_text(fitz.Point(40, cur_y + 40), obj_p2, fontsize=7.5, color=(0.25, 0.30, 0.38))
     page.insert_text(fitz.Point(40, cur_y + 52), obj_p3, fontsize=7.5, color=(0.25, 0.30, 0.38))
@@ -808,9 +812,9 @@ def generate_pdf_report(metrics, patterns, filepath):
     card_w = 84
     card_h = 42
     cards = [
-        ("True Positives (TP)", f"{metrics['total_tp']}", "152 Correct", (0.13, 0.65, 0.40)),
-        ("False Positives (FP)", f"{metrics['total_fp']}", "48 Incorrect", (0.85, 0.25, 0.22)),
-        ("False Negatives (FN)", f"{metrics['total_fn']}", "25 Missed", (0.92, 0.58, 0.15)),
+        ("True Positives (TP)", f"{metrics['total_tp']}", f"{metrics['total_tp']} Correct", (0.13, 0.65, 0.40)),
+        ("False Positives (FP)", f"{metrics['total_fp']}", f"{metrics['total_fp']} Incorrect", (0.85, 0.25, 0.22)),
+        ("False Negatives (FN)", f"{metrics['total_fn']}", f"{metrics['total_fn']} Missed", (0.92, 0.58, 0.15)),
         ("Micro Precision", f"{metrics['precision']*100:.2f}%", "TP/(TP+FP)", (0.15, 0.45, 0.75)),
         ("Micro Recall", f"{metrics['recall']*100:.2f}%", "TP/(TP+FN)", (0.13, 0.65, 0.40)),
         ("Micro F1-Score", f"{metrics['f1_score']*100:.2f}%", "Harmonic Mean", (0.45, 0.30, 0.70))
@@ -843,7 +847,7 @@ def generate_pdf_report(metrics, patterns, filepath):
     mr_sh.commit()
     page.insert_text(
         fitz.Point(36, cur_y + 11),
-        f"Critical Risk Metric: Required-Skill Miss Rate = {metrics['miss_rate']*100:.2f}% (25 / 177 required skills omitted, blocking search discovery).",
+        f"Critical Risk Metric: Required-Skill Miss Rate = {metrics['miss_rate']*100:.2f}% ({metrics['total_fn']} / {metrics['total_required_skills']} required skills omitted, blocking search discovery).",
         fontsize=7.5, color=(0.70, 0.30, 0.05)
     )
 
@@ -855,19 +859,19 @@ def generate_pdf_report(metrics, patterns, filepath):
 
     pattern_boxes = [
         (
-            "Pattern 1: Modality Insensitivity (20 errors / 27.4% of total errors)",
+            f"Pattern 1: Modality Insensitivity ({patterns[0]['count']} errors / {patterns[0]['percentage']:.1f}% of total errors)",
             "Problem: Model tags optional/preferred skills ('Bonus if...', 'Nice to have:') as mandatory requirements.",
             "Examples: JD004 (SEO tagged; optional bonus) | JD011 (Python tagged; optional) | JD022 (Git; 'plus, not must').",
             "Matching Impact: False prerequisite barrier. Qualified students lacking optional skills are falsely screened out."
         ),
         (
-            "Pattern 2: Hallucinations & Non-Taxonomy Invasions (28 errors / 38.4% of total errors)",
-            "Problem: Unprompted enterprise tags (SAP, K8s, Blockchain) + soft skills (Leadership, Teamwork) outside taxonomy.",
+            f"Pattern 2: Hallucinations & Non-Taxonomy Invasions ({patterns[1]['count']} errors / {patterns[1]['percentage']:.1f}% of total errors)",
+            "Problem: Unprompted enterprise tags (SAP, K8s, Blockchain) + broad/unmapped terms (Leadership, API, Social Media).",
             "Examples: JD004/JD044 (SAP in Content Writer) | JD007/JD025 (Kubernetes in Finance/Marketing) | JD003 (Leadership).",
             "Matching Impact: Distorted job matching. Candidates searching for enterprise skills get mismatched non-technical roles."
         ),
         (
-            "Pattern 3: Core Technical Skill Omissions (25 errors / 34.2% of total errors / Miss Rate: 14.12%)",
+            f"Pattern 3: Core Technical Skill Omissions ({patterns[2]['count']} errors / {patterns[2]['percentage']:.1f}% of total errors / Miss Rate: {metrics['miss_rate']*100:.2f}%)",
             "Problem: Omission of foundational technical requirements explicitly stated in daily-use and requirement clauses.",
             "Examples: JD002 (missed React) | JD013/JD043 (missed PostgreSQL) | JD041 (missed Power BI) | JD043 (missed REST APIs).",
             "Matching Impact: Search opacity. Students possessing target technical skills cannot discover relevant job postings."
@@ -889,8 +893,8 @@ def generate_pdf_report(metrics, patterns, filepath):
 
     cur_y += 4
 
-    # 5. Priority Improvement Recommendation
-    page.insert_text(fitz.Point(32, cur_y + 10), "4. PRIORITY IMPROVEMENT RECOMMENDATION & BEFORE/AFTER EVALUATION", fontsize=9, color=(0.08, 0.16, 0.32))
+    # 5. Priority Improvement Recommendation (Proposed Architecture)
+    page.insert_text(fitz.Point(32, cur_y + 10), "4. PRIORITY IMPROVEMENT RECOMMENDATION (PROPOSED SOLUTION ARCHITECTURE)", fontsize=9, color=(0.08, 0.16, 0.32))
     cur_y += 16
 
     rec_sh = page.new_shape()
@@ -898,13 +902,13 @@ def generate_pdf_report(metrics, patterns, filepath):
     rec_sh.finish(fill=(0.97, 0.99, 0.97), color=(0.80, 0.90, 0.82))
     rec_sh.commit()
 
-    page.insert_text(fitz.Point(38, cur_y + 12), "Priority Action: Two-Stage Taxonomy Enforcement & Linguistic Modality Gating", fontsize=8, color=(0.10, 0.45, 0.20))
-    rec_t1 = "Implementation: 1) Taxonomy Gate: Filter tags strictly against official taxonomy & synonym resolver (eliminating 16 non-tax FPs)."
-    rec_t2 = "2) Modality Parser: Parse 'bonus/nice-to-have' clauses to route optional skills to optional_tags, not required (eliminating 20 FPs)."
-    rec_t3 = "3) Lexical Evidence Verifier: Suppress tags lacking verbatim textual support (eliminating 12 enterprise hallucinations)."
-    rec_t4 = "Measured Before & After Impact (Tested on same 50 JDs):"
-    rec_t5 = "  * Baseline Model:  TP = 152 | FP = 48 | FN = 25 | Precision = 76.00% | Recall = 85.88% | F1 = 80.64%"
-    rec_t6 = "  * Post-Gating:     TP = 152 | FP = 0  | FN = 25 | Precision = 100.00% (+24.0%) | Recall = 85.88% | F1 = 92.40% (+11.76%)"
+    page.insert_text(fitz.Point(38, cur_y + 12), "Proposed Design: Two-Stage Taxonomy Enforcement & Linguistic Modality Gating", fontsize=8, color=(0.10, 0.45, 0.20))
+    rec_t1 = "1) Taxonomy Gate: Filter tags strictly against canonical taxonomy & resolver (proposed target: drop non-tax tokens)."
+    rec_t2 = "2) Modality Parser: Route optional clause mentions ('bonus/nice-to-have') to optional_tags rather than required_tags."
+    rec_t3 = "3) Lexical Evidence Verifier: Suppress hallucinated enterprise tags lacking verbatim textual support in description."
+    rec_t4 = f"Current Measured Baseline: TP = {metrics['total_tp']} | FP = {metrics['total_fp']} | FN = {metrics['total_fn']} | Precision = {metrics['precision']*100:.2f}% | Recall = {metrics['recall']*100:.2f}% | F1 = {metrics['f1_score']*100:.2f}%"
+    rec_t5 = "Proposed Solution Scope: Theoretical post-processing architecture recommendation; pipeline is not yet implemented or tested."
+    rec_t6 = "Status: Formulated strictly as proposed engineering recommendation without claiming unverified before/after test results."
     page.insert_text(fitz.Point(38, cur_y + 23), rec_t1, fontsize=6.8, color=(0.20, 0.30, 0.25))
     page.insert_text(fitz.Point(38, cur_y + 32), rec_t2, fontsize=6.8, color=(0.20, 0.30, 0.25))
     page.insert_text(fitz.Point(38, cur_y + 41), rec_t3, fontsize=6.8, color=(0.20, 0.30, 0.25))
@@ -919,10 +923,10 @@ def generate_pdf_report(metrics, patterns, filepath):
     page.insert_text(fitz.Point(32, cur_y + 8), "5. LIMITATIONS & TRANSPARENT TOOL USAGE DISCLOSURE", fontsize=8.5, color=(0.08, 0.16, 0.32))
     cur_y += 12
 
-    disc_p1 = "Study Limitations: Benchmark evaluates 50 synthetic internship postings with templated structures; production JDs present greater"
-    disc_p2 = "syntactic variability. True multi-annotator inter-rater reliability (Fleiss' Kappa) was not computed across an external human panel."
+    disc_p1 = "Study Limitations: Evaluated on 50 synthetic internship postings with templated syntax; production JDs show greater variability."
+    disc_p2 = "True multi-annotator inter-rater reliability (Fleiss' Kappa) was not computed across an independent external human panel."
     disc_p3 = "Tool Disclosure: Antigravity AI was utilized to draft initial rule extraction logic, compile XML/PDF generators, and verify metrics."
-    disc_p4 = "Independent Review: Ground-truth reference annotations, synonym mappings, and error classifications were verified across all 50 JDs."
+    disc_p4 = "Annotation Status: Reference labels were auto-generated by regex rules. Independent human review is pending for all 50 JDs."
     page.insert_text(fitz.Point(38, cur_y + 8), disc_p1, fontsize=6.7, color=(0.40, 0.45, 0.50))
     page.insert_text(fitz.Point(38, cur_y + 17), disc_p2, fontsize=6.7, color=(0.40, 0.45, 0.50))
     page.insert_text(fitz.Point(38, cur_y + 26), disc_p3, fontsize=6.7, color=(0.40, 0.45, 0.50))
@@ -1001,9 +1005,13 @@ def run_validation_suite(df_eval, metrics, taxonomy_skills):
     print(f"[PASS 7/10] Independent metric recalculation matches exact figures:")
     print(f"            Precision: {metrics['precision']*100:.2f}% | Recall: {metrics['recall']*100:.2f}% | F1: {metrics['f1_score']*100:.2f}% | Miss Rate: {metrics['miss_rate']*100:.2f}%")
 
-    # 8. Ensure spreadsheet totals match PDF report figures
-    assert raw_tp == 152 and raw_fp == 48 and raw_fn == 25
-    print(f"[PASS 8/10] Spreadsheet counts (TP: 152, FP: 48, FN: 25) match report figures.")
+    # 8. Data-driven validation of metrics consistency (replaces hardcoded assertions)
+    assert raw_tp + raw_fp == metrics['total_predicted_tags'], f"Total predicted mismatch: {raw_tp + raw_fp} vs {metrics['total_predicted_tags']}"
+    assert raw_tp + raw_fn == metrics['total_required_skills'], f"Total required mismatch: {raw_tp + raw_fn} vs {metrics['total_required_skills']}"
+    assert metrics['total_tp'] == raw_tp
+    assert metrics['total_fp'] == raw_fp
+    assert metrics['total_fn'] == raw_fn
+    print(f"[PASS 8/10] Data-driven validation verified: TP={raw_tp}, FP={raw_fp}, FN={raw_fn} (Total Pred={raw_tp+raw_fp}, Total Req={raw_tp+raw_fn}).")
 
     # 9. Ensure all three error patterns supported by actual data
     print("[PASS 9/10] All 3 error patterns substantiated by real JD IDs (JD004, JD007, JD002, etc.).")
